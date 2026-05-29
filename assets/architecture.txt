@@ -1,0 +1,60 @@
+Claude Code on iPhone — Architecture
+====================================
+
+  ┌─────────────┐     ┌──────────────┐     ┌─────────────┐
+  │  iPhone     │     │  Tailscale   │     │  Windows PC │
+  │             │ ←→  │  (private    │ ←→  │             │
+  │  Termius    │     │   network)   │     │  OpenSSH    │
+  └─────────────┘     └──────────────┘     └──────┬──────┘
+                                                  │
+                                                  ▼
+                                          ┌─────────────┐
+                                          │  PowerShell │
+                                          └──────┬──────┘
+                                                 │
+                                                 ▼
+                                          ┌─────────────┐
+                                          │ claude code │
+                                          └─────────────┘
+
+Layers
+------
+
+01  Tailscale     Private mesh VPN. Makes the phone and PC see each
+                  other on a flat 100.x.x.x network. WireGuard under
+                  the hood. Free up to 100 devices.
+
+02  OpenSSH       Built into Windows 10/11. Accepts the SSH connection,
+                  authenticates with an ED25519 public key, drops the
+                  user into PowerShell. Listens on TCP 22.
+
+03  Termius       SSH client on iPhone. Free tier covers everything we
+                  need: keychain, key generation, saved hosts, FaceID
+                  unlock for the passphrase.
+
+04  Claude Code   The actual AI agent. Runs in the PowerShell session
+                  exactly the same as on the desktop — same MCP tools,
+                  same skills, same project state, same credentials.
+
+Flow
+----
+
+  type in Termius
+        │
+        ▼
+  Tailscale tunnel (encrypted)
+        │
+        ▼
+  PC firewall  →  sshd (port 22)
+        │
+        ▼
+  publickey auth  →  administrators_authorized_keys
+        │
+        ▼
+  PowerShell prompt
+        │
+        ▼
+  > claude
+        │
+        ▼
+  Claude Code agent  →  filesystem / network shares / MCP / tools
