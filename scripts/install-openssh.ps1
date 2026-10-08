@@ -10,7 +10,7 @@
   Idempotent — safe to re-run.
 
 .LINK
-  https://github.com/chenlab789/claude-code-mobile
+  https://github.com/lec79731-debug/claude-code-mobile
 #>
 
 $ErrorActionPreference = 'Stop'

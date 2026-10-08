@@ -28,7 +28,7 @@
   .\install-authkey.ps1 -PublicKey "ssh-ed25519 AAAA... iphone"
 
 .LINK
-  https://github.com/chenlab789/claude-code-mobile
+  https://github.com/lec79731-debug/claude-code-mobile
 #>
 
 param(

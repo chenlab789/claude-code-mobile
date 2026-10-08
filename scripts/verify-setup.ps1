@@ -13,7 +13,7 @@
     - Recent OpenSSH auth events (last 10)
 
 .LINK
-  https://github.com/chenlab789/claude-code-mobile
+  https://github.com/lec79731-debug/claude-code-mobile
 #>
 
 function Section($title) {
