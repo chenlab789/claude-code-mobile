@@ -95,6 +95,28 @@ Claude บนคลาวด์เข้าไม่ถึงไฟล์ใน�
 **`Connection refused`** — `sshd` ไม่ได้รัน (`Get-Service sshd` แล้ว `Start-Service sshd`) หรือ firewall บล็อก port 22
 **`Connection timed out`** — Tailscale หลุดฝั่งใดฝั่งหนึ่ง หรือ IP ผิด (รัน `tailscale ip -4` บนคอมเพื่อเช็ค)
 
+
+### ภาค 2: คุยด้วยเสียง (แอป Claude Voice)
+ไม่อยากพิมพ์ใน terminal ก็ใช้แอปในโฟลเดอร์ `voice/` แทนได้ เป็นเว็บแอปเล็กๆ บนคอม เปิดจากมือถือแล้ว **กดค้างที่วงแล้วพูด** ปล่อยนิ้วแล้ว Claude Code บนคอมจะลงมือทำ และตอบกลับมาเป็นเสียง
+- แสดงคำตอบแบบ stream เหมือน terminal พร้อมชื่อ tool ที่กำลังใช้ และ statusline (โมเดล, context %, quota 5 ชม./สัปดาห์)
+- แนบรูป/ไฟล์/คลิปจากมือถือได้ (สูงสุด 2 GB) แล้ว Claude ส่งรูปหรือคลิปกลับขึ้นจอได้ เช่นสั่ง "แคปจอคอมให้ดูหน่อย"
+- คุยต่อเนื่องเป็น session เดียว ปิดแอปแล้วเปิดใหม่ประวัติยังอยู่ ส่วน Claude ทำงานต่อแม้มือถือหลุด
+- UI มีภาษาไทยและอังกฤษ (เลือกตามภาษาเครื่อง หรือเติม `?lang=th`) ตั้งภาษาคำตอบและเสียงได้ใน `.env`
+- ล็อกด้วย PIN และ bind แค่ `127.0.0.1` เข้าได้เฉพาะเครื่องใน Tailscale ของคุณ
+
+ต้องมี Node.js 18+ และ `pip install edge-tts` (TTS ฟรี)
+
+```powershell
+cd voice
+copy .env.example .env      # ตั้ง PIN, REPLY_LANG=Thai, VOICE=th-TH-NiwatNeural, SPEECH_LANG=th-TH
+node server.js
+tailscale serve --bg --https=8443 http://127.0.0.1:8780
+```
+มือถือเปิด `https://<ชื่อคอม>.<tailnet>.ts.net:8443` ใส่ PIN แล้วกด Share → **Add to Home Screen** จะได้เป็นแอป
+ให้รันเองตอนเปิดเครื่อง: วาง shortcut ของ `voice\start.vbs` ไว้ใน `shell:startup`
+
+> ⚠️ แอปนี้รัน Claude แบบ `--dangerously-skip-permissions` (ไม่มีใครนั่งกดอนุญาตที่หน้าคอม) ใครรู้ PIN และอยู่ใน tailnet ของคุณ = สั่งคอมได้ทุกอย่าง ตั้ง PIN ให้เดายาก และอย่าเปิด `tailscale funnel` ออกอินเทอร์เน็ตเด็ดขาด
+
 ---
 
 ## English
@@ -164,6 +186,28 @@ Prints the status of `sshd`, port 22, Tailscale connectivity, recent auth events
 **`Connection refused`** — `sshd` not running (`Get-Service sshd`, then `Start-Service sshd`) or firewall blocking port 22 (`Get-NetFirewallRule -Name 'OpenSSH-Server-In-TCP'`)
 **`Connection timed out`** — Tailscale disconnected on one side, or wrong IP (run `tailscale ip -4` on the PC)
 
+
+### Part 2: talk to it (the Claude Voice app)
+Don't want to type in a terminal? The `voice/` folder is a small web app on your PC. Open it on your phone, **hold the circle and talk**, and when you let go Claude Code on your PC does the work and answers out loud.
+- Streams the reply like the terminal does, with the tool in use and a statusline (model, context %, 5-hour/weekly quota)
+- Attach photos, files or videos from the phone (up to 2 GB). Claude can send images or videos back, e.g. "show me a screenshot of my PC"
+- One continuous session: history survives closing the app, and Claude keeps working if the phone disconnects
+- English and Thai UI (follows the phone's language, or add `?lang=en`). Reply language and voice are set in `.env`
+- PIN-locked and bound to `127.0.0.1`, so it's reachable only from devices in your Tailscale network
+
+Needs Node.js 18+ and `pip install edge-tts` (free TTS).
+
+```powershell
+cd voice
+copy .env.example .env      # set PIN, REPLY_LANG, VOICE, SPEECH_LANG
+node server.js
+tailscale serve --bg --https=8443 http://127.0.0.1:8780
+```
+On the phone open `https://<pc-name>.<tailnet>.ts.net:8443`, enter the PIN, then Share → **Add to Home Screen** to get an app icon.
+To run at login, put a shortcut to `voice\start.vbs` in `shell:startup`.
+
+> ⚠️ The app runs Claude with `--dangerously-skip-permissions`, because nobody is at the PC to approve prompts. Anyone in your tailnet who knows the PIN can make your PC do anything. Use a hard-to-guess PIN and never expose it with `tailscale funnel`.
+
 ---
 
 ## Files
@@ -175,6 +219,12 @@ Prints the status of `sshd`, port 22, Tailscale connectivity, recent auth events
 │   ├── install-openssh.ps1         ← enable OpenSSH + sshd + firewall
 │   ├── install-authkey.ps1         ← install pubkey + lock ACL
 │   └── verify-setup.ps1            ← debug / status checks
+├── voice/                          ← Part 2: push-to-talk voice app
+│   ├── server.js                   ← phone ↔ claude -p ↔ edge-tts bridge
+│   ├── public/                     ← the phone UI (installable PWA)
+│   ├── .env.example
+│   ├── start.vbs / restart.ps1     ← run hidden at login / safe restart
+│   └── shot.ps1                    ← screenshot helper Claude can call
 └── assets/
     └── architecture.txt
 ```

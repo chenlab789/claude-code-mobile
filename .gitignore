@@ -26,3 +26,10 @@ known_hosts
 .venv/
 __pycache__/
 *.pyc
+
+# voice app runtime
+voice/.env
+voice/tmp/
+voice/logs/
+voice/state.json
+voice/history.json

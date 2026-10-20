@@ -1,0 +1,516 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0c0c0c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Claude Voice">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<title>Claude Voice</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=IBM+Plex+Sans+Thai+Looped:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  /* Claude Code terminal look — xterm-256 colors */
+  :root { --bg:#0c0c0c; --text:#e8e8e8; --dim:#7a7a7a; --accent:#ff8700; --line:#3a3a3a; --danger:#ff5f5f;
+    --green:#00ff87; --sep:#af5f00; --pink:#ff87af; --glow:rgba(255,135,0,.4);
+    --mono: "JetBrains Mono", "Cascadia Mono", ui-monospace, Menlo, Consolas, "IBM Plex Sans Thai Looped", monospace; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--text); font-family:var(--mono); }
+  body { display:flex; flex-direction:column; height:100dvh; padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom); overflow:hidden; position:relative; }
+  #bg { position:fixed; inset:0; width:100%; height:100%; z-index:0; pointer-events:none; }
+  header, #log, #live, footer, #sl { position:relative; z-index:1; }
+  button, input { font-family:var(--mono); }
+
+  /* ---------- header ---------- */
+  header { display:flex; align-items:center; gap:8px; padding:10px 12px 8px; font-size:12px; }
+  header.top { border-bottom:1px solid var(--line); }
+  header.bar { padding:6px 12px 0; gap:12px; }
+  .brand { display:flex; align-items:baseline; gap:8px; min-width:0; }
+  .brand h1 { font-size:13px; margin:0; font-weight:700; color:var(--accent); white-space:nowrap; }
+  .brand small { font-size:10px; color:var(--dim); white-space:nowrap; }
+  #status { font-size:10px; color:var(--dim); letter-spacing:.08em; }
+  .dot { width:7px; height:7px; border-radius:50%; background:var(--dim); flex:none; }
+  .dot.on { background:var(--green); }
+  .dot.busy { background:var(--accent); animation:pulse .8s infinite; }
+  @keyframes pulse { 50% { opacity:.25 } }
+  header .sp { flex:1 }
+  .hbtn { background:none; border:0; color:var(--dim); padding:2px 0; font-size:11px; }
+  .hbtn::before { content:"["; color:#555; } .hbtn::after { content:"]"; color:#555; }
+  .hbtn:active { color:var(--accent); }
+  .hbtn.off { color:var(--danger); }
+
+  /* ---------- log: Claude Code style lines ---------- */
+  #log { flex:1; overflow-y:auto; padding:12px 12px 6px; display:flex; flex-direction:column; gap:12px; }
+  .msg { position:relative; padding-left:18px; line-height:1.6; font-size:14px; white-space:pre-wrap; word-break:break-word; animation:in .15s ease-out both; }
+  @keyframes in { from { opacity:0 } to { opacity:1 } }
+  .msg::before { position:absolute; left:2px; top:0; }
+  .ai::before { content:"●"; color:var(--text); }
+  .ai.live::after { content:"█"; color:var(--accent); animation:pulse .7s infinite; margin-left:2px; }
+  .me { color:#c8c8c8; background:#1e1e1e; padding:6px 10px 6px 26px; }
+  .me::before { content:">"; left:10px; top:6px; color:var(--dim); }
+  .tool { position:relative; padding-left:18px; font-size:12px; color:var(--text); animation:in .2s both; }
+  .tool::before { content:"●"; position:absolute; left:2px; color:var(--green); }
+  .tool b { font-weight:700; } .tool span { color:var(--dim); }
+  .msg.tool { color:var(--dim); } .msg.tool::before { content:"⎿"; color:var(--dim); }
+  .err { color:var(--danger); font-size:13px; }
+  .err::before { content:"✗"; color:var(--danger); }
+  .sys { font-size:11px; color:var(--dim); padding-left:18px; position:relative; animation:in .5s both; }
+  .sys::before { content:"✻"; color:var(--accent); position:absolute; left:2px; }
+  .pic { margin-left:18px; max-width:88%; animation:in .4s both; position:relative; }
+  .pic img, .pic video { display:block; max-width:100%; max-height:60vh; border:1px solid var(--line); }
+
+  /* ---------- prompt + talk button ---------- */
+  #live { min-height:18px; padding:0 14px; color:var(--accent); font-size:13px; }
+  #live:not(:empty)::before { content:"✻ "; }
+  footer { padding:0 12px 2px; display:flex; flex-direction:column; align-items:center; gap:6px; }
+  #mic { width:120px; height:120px; touch-action:none; user-select:none; -webkit-user-select:none; position:relative; }
+  #mic canvas { width:100%; height:100%; display:block; pointer-events:none; }
+  .hint { color:var(--dim); font-size:10px; }
+  #mic.cancel + .hint { color:var(--danger); }
+  #att { display:flex; flex-wrap:wrap; gap:6px; width:100%; }
+  #att:empty { display:none; }
+  .chip { display:flex; align-items:center; gap:6px; max-width:100%; padding:3px 6px 3px 3px; border:1px solid var(--line); font-size:11px; color:var(--text); }
+  .chip img { width:30px; height:30px; object-fit:cover; }
+  .chip span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:140px; padding-left:4px; }
+  .chip.up { opacity:.5; }
+  .chip i { font-style:normal; color:var(--dim); padding:0 4px; cursor:pointer; }
+  .msg.me .thumbs { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
+  .msg.me .thumbs img { width:72px; height:72px; object-fit:cover; }
+  .row { display:flex; align-items:center; gap:2px; width:100%; border-top:1px solid #9a9a9a; border-bottom:1px solid #9a9a9a; padding:4px 0; }
+  .row::before { content:">"; color:var(--text); font-weight:700; padding:0 4px 0 2px; order:1; }
+  .row input { order:2; flex:1; min-width:0; background:none; border:0; color:var(--text); padding:6px 2px; font-size:15px; outline:none; caret-color:var(--accent); }
+  .row input::placeholder { color:#555; }
+  .row button { order:3; background:none; border:0; color:var(--dim); padding:4px 6px; font-size:12px; }
+  .row #attach { order:0; color:var(--accent); font-size:16px; padding:2px 6px; }
+  .row button:active { color:var(--accent); }
+  #stop { color:var(--danger); }
+
+  /* ---------- statusline like Claude Code ---------- */
+  #sl { padding:4px 12px 10px; font-size:11px; line-height:1.7; font-weight:700; }
+  #sl .l1 { display:flex; flex-wrap:wrap; column-gap:6px; align-items:center; }
+  #sl .s { color:var(--sep); font-weight:400; }
+  #sl .g { white-space:nowrap; }
+  #sl .l2 { color:var(--pink); font-weight:400; }
+  #sl .l2 i { font-style:normal; color:var(--dim); }
+
+  /* ---------- PIN gate ---------- */
+  #gate { position:fixed; inset:0; z-index:5; background:var(--bg); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; padding:16px; }
+  #gate[hidden] { display:none; }
+  #gate .brand { flex-direction:column; align-items:center; }
+  #gate .brand h1 { font-size:20px; }
+  #gate input { width:210px; text-align:center; font-size:26px; letter-spacing:.4em; background:#141414; border:1px solid var(--line); color:var(--accent); padding:12px; outline:none; }
+  #gate input:focus { border-color:var(--accent); }
+  #gate button { background:var(--accent); color:#1a0d00; border:0; padding:12px 36px; font-size:14px; font-weight:700; letter-spacing:.2em; }
+</style>
+
+</head>
+<body>
+<canvas id="bg"></canvas>
+<header class="top">
+  <span id="dot" class="dot"></span>
+  <div class="brand"><h1>Claude Voice</h1><small id="clock">--:--:--</small></div>
+  <span class="sp"></span>
+  <span id="status">BOOT</span>
+</header>
+<header class="bar">
+  <button class="hbtn" id="mute"></button>
+  <button class="hbtn" id="sttMode"></button>
+  <span class="sp"></span>
+  <button class="hbtn" id="reload" data-t="reload"></button>
+  <button class="hbtn" id="reset" data-t="reset"></button>
+</header>
+<div id="log"></div>
+<div id="live"></div>
+<footer>
+  <div id="mic" data-ta="holdTalk"><canvas id="rx"></canvas></div>
+  <div class="hint" id="hint" data-t="holdHint"></div>
+  <div id="att"></div>
+  <input type="file" id="file" multiple hidden>
+  <form class="row" id="form"><button type="button" id="attach" data-ta="attach">+</button><input id="txt" data-tp="type" autocomplete="off"><button data-t="send"></button><button type="button" id="stop" data-t="stop"></button></form>
+</footer>
+<div id="sl"></div>
+<div id="gate" hidden>
+  <div class="brand" style="align-items:center"><h1>Claude Voice</h1><small>AUTHORIZATION REQUIRED</small></div>
+  <input id="pin" inputmode="numeric" maxlength="6">
+  <button id="pinGo" data-t="enter"></button>
+  <div class="hint" id="gateMsg"></div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+// ---------- i18n: phone language, or ?lang=th / ?lang=en ----------
+const L = {
+  en: { voiceOn:'voice: on', voiceOff:'voice: off', hear:'listen', hearDevice:'phone', reload:'reload', reset:'new',
+        holdHint:'hold the circle and talk, release to send', listenHint:'listening... release to send, swipe up to cancel',
+        thinkHint:'thinking', speakHint:'speaking, tap the circle to interrupt', releaseCancel:'release to cancel', cancelled:'cancelled',
+        type:'or type here', send:'send', stop:'stop', enter:'enter', attach:'attach file', holdTalk:'hold to talk',
+        badPin:'wrong PIN', noServer:'cannot reach server: ', newSession:'Start a new conversation?', uploadFail:'upload failed: ',
+        files:n => '📎 ' + n + ' file(s)', exitErr:'exited with error ', lost:'connection lost: ', transcribing:'transcribing...',
+        micFail:'cannot open the mic: ', srDenied:'This phone blocks built-in speech recognition. Switched to ElevenLabs, hold to talk again.',
+        slHint:'hold the circle to talk' },
+  th: { voiceOn:'เสียง: เปิด', voiceOff:'เสียง: ปิด', hear:'ฟัง', hearDevice:'มือถือ', reload:'รีโหลด', reset:'เริ่มใหม่',
+        holdHint:'กดค้างที่วงแล้วพูด ปล่อยเพื่อส่ง', listenHint:'กำลังฟัง... ปล่อยเพื่อส่ง ปัดขึ้นเพื่อยกเลิก',
+        thinkHint:'กำลังคิด', speakHint:'กำลังพูด แตะวงเพื่อพูดแทรก', releaseCancel:'ปล่อยเพื่อยกเลิก', cancelled:'ยกเลิกแล้ว',
+        type:'พิมพ์ก็ได้', send:'ส่ง', stop:'หยุด', enter:'เข้า', attach:'แนบไฟล์', holdTalk:'กดค้างเพื่อพูด',
+        badPin:'PIN ผิด', noServer:'ต่อ server ไม่ได้: ', newSession:'เริ่มบทสนทนาใหม่?', uploadFail:'อัปไฟล์ไม่ได้: ',
+        files:n => 'แนบ ' + n + ' ไฟล์', exitErr:'จบด้วย error ', lost:'เชื่อมต่อหลุด: ', transcribing:'กำลังแปลงเสียง...',
+        micFail:'เปิดไมค์ไม่ได้: ', srDenied:'มือถือไม่ให้ใช้ระบบฟังเสียงในตัว สลับไป ElevenLabs แล้ว กดพูดใหม่อีกที',
+        slHint:'กดค้างวงเพื่อพูด' },
+};
+const LANG = (new URLSearchParams(location.search).get('lang') || navigator.language || 'en').slice(0, 2) === 'th' ? 'th' : 'en';
+const T = L[LANG];
+document.documentElement.lang = LANG;
+document.querySelectorAll('[data-t]').forEach(e => { e.textContent = T[e.dataset.t]; });
+document.querySelectorAll('[data-tp]').forEach(e => { e.placeholder = T[e.dataset.tp]; });
+document.querySelectorAll('[data-ta]').forEach(e => { e.setAttribute('aria-label', T[e.dataset.ta]); });
+let HOST = '', SPEECH_LANG = '';
+const store = { get:k=>{try{return localStorage.getItem(k)}catch{return null}}, set:(k,v)=>{try{localStorage.setItem(k,v)}catch{}} };
+let PIN = store.get('pin') || '';
+let muted = store.get('muted') === '1';
+let sttMode = store.get('stt') || ((window.SpeechRecognition || window.webkitSpeechRecognition) ? 'device' : 'server');
+
+// ---------- auth ----------
+async function api(p, opt = {}) {
+  opt.headers = { ...(opt.headers || {}), 'x-pin': PIN };
+  const r = await fetch(p, opt);
+  if (r.status === 401) { showGate(); throw new Error('pin'); }
+  return r;
+}
+function showGate() { $('gate').hidden = false; $('pin').focus(); }
+$('pinGo').onclick = async () => {
+  PIN = $('pin').value.trim(); store.set('pin', PIN);
+  try { await api('/api/ping'); $('gate').hidden = true; ping(); }
+  catch (e) { $('gateMsg').textContent = e.message === 'pin' ? T.badPin : T.noServer + e.message; }
+};
+$('pin').addEventListener('keydown', e => { if (e.key === 'Enter') $('pinGo').click(); });
+let online = false;
+async function ping() {
+  try { const j = await (await api('/api/ping')).json(); online = true; HOST = j.host || HOST; SPEECH_LANG = j.speechLang || SPEECH_LANG; showUsage(j.usage); $('dot').className = 'dot ' + (j.busy ? 'busy' : 'on'); if (!histLoaded) loadHistory(); }
+  catch { online = false; $('dot').className = 'dot'; }
+}
+
+// ---------- chat history (kept on the server) ----------
+let histLoaded = false, histSig = '';
+async function loadHistory() {
+  if (running) return;
+  try {
+    const j = await (await api('/api/history')).json();
+    histLoaded = true;
+    const sig = JSON.stringify(j.items);
+    if (sig !== histSig && !running) {
+      histSig = sig; $('log').innerHTML = '';
+      for (const h of j.items) {
+        if (h.t === 'me') { const d = add('me', h.text); if (h.thumbs && h.thumbs.length) { const th = document.createElement('div'); th.className = 'thumbs'; for (const u of h.thumbs) { const im = document.createElement('img'); im.src = u; th.appendChild(im); } d.appendChild(th); } }
+        else if (h.t === 'ai') { const d = add('ai', h.text); if (h.open) d.classList.add('live'); }
+        else if (h.t === 'tool') addTool(h.name);
+        else if (h.t === 'image') addImage(h.url);
+        else if (h.t === 'video') addVideo(h.url);
+        else if (h.t === 'err') add('err', h.text);
+      }
+      if (!j.items.length) sys('SYSTEM ONLINE');
+    }
+    // a reply is still running (e.g. the app was closed mid-answer): keep polling until it ends
+    if (j.busy) setTimeout(loadHistory, 1500); else $('dot').className = 'dot on';
+  } catch {}
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && PIN) loadHistory(); });
+if (!PIN) showGate(); else ping();
+setInterval(() => { if (!running) ping(); }, 20000);
+
+// ---------- ui ----------
+function add(cls, text) { const d = document.createElement('div'); d.className = 'msg ' + cls; d.textContent = text; $('log').appendChild(d); scroll(); return d; }
+function addTool(name) {
+  const n = String(name), m = n.match(/^mcp__(.+?)__(.+)$/);
+  const d = document.createElement('div'); d.className = 'tool';
+  const b = document.createElement('b'); b.textContent = m ? m[2] : n; d.appendChild(b);
+  if (m) { const sp = document.createElement('span'); sp.textContent = ' (' + m[1].replace(/^claude_ai_/, '') + ')'; d.appendChild(sp); }
+  $('log').appendChild(d); scroll();
+}
+function addImage(url) {
+  const a = document.createElement('a'); a.className = 'pic'; a.href = url; a.target = '_blank';
+  const im = document.createElement('img'); im.src = url; im.onload = scroll;
+  a.appendChild(im); $('log').appendChild(a); scroll();
+}
+function addVideo(url) {
+  const d = document.createElement('div'); d.className = 'pic';
+  const v = document.createElement('video'); v.src = url; v.controls = true; v.playsInline = true; v.preload = 'metadata'; v.onloadedmetadata = scroll;
+  d.appendChild(v); $('log').appendChild(d); scroll();
+}
+function scroll() { $('log').scrollTop = $('log').scrollHeight; }
+function paintToggles() {
+  $('mute').textContent = muted ? T.voiceOff : T.voiceOn; $('mute').classList.toggle('off', muted);
+  $('sttMode').textContent = T.hear + ': ' + (sttMode === 'device' ? T.hearDevice : 'ElevenLabs');
+}
+paintToggles();
+$('mute').onclick = () => { muted = !muted; store.set('muted', muted ? '1' : '0'); if (muted) stopAudio(); paintToggles(); };
+$('sttMode').onclick = () => { sttMode = sttMode === 'device' ? 'server' : 'device'; store.set('stt', sttMode); paintToggles(); };
+$('reload').onclick = () => location.reload();
+$('reset').onclick = async () => { if (!confirm(T.newSession)) return; stopAudio(); await api('/api/reset', { method:'POST' }); $('log').innerHTML = ''; histSig = '[]'; sys('NEW SESSION'); };
+let lastUsage = null;
+function showUsage(u) {
+  if (u) lastUsage = u; u = lastUsage; if (!u) return;
+  const esc = t => String(t).replace(/[&<>]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' })[c]);
+  const c = (t, col) => `<span style="color:${col}">${esc(t)}</span>`;
+  const barCol = p => p >= 85 ? '#ff0000' : p >= 65 ? '#ff5f00' : p >= 40 ? '#ff8700' : p >= 15 ? '#ffaf5f' : '#ffaf87';
+  const bar = p => { const f = Math.round(Math.max(0, Math.min(100, p)) * 4 / 100); return c('█'.repeat(f), barCol(p)) + c('░'.repeat(4 - f), '#875f5f'); };
+  const k = n => n >= 1e6 ? (n / 1048576).toFixed(1) + 'M' : n >= 1000 ? (n / 1024).toFixed(1) + 'k' : String(n);
+  const left = s => { const ms = s * 1000 - Date.now(); if (ms <= 0) return '';
+    if (ms >= 864e5) return Math.floor(ms / 864e5) + 'd' + Math.floor(ms % 864e5 / 36e5) + 'h';
+    if (ms >= 36e5) return new Date(s * 1000).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' }).replace(' ', '').toLowerCase();
+    return Math.floor(ms / 6e4) + 'm'; };
+  const model = m => m.replace(/\[[^\]]*\]/g, '').replace(/^claude-/i, '').replace(/^(\w)(\w*)-(\d+)-(\d+).*$/, (_, a, b, x, y) => a.toUpperCase() + b + ' ' + x + '.' + y);
+  const eff = { low:'#00ff87', medium:'#ffd700', high:'#ff8700', xhigh:'#ff0000', max:'#ff00ff' };
+  const p = [c(HOST || 'PC', '#00ff87')];
+  if (u.model) p.push(c(model(u.model), '#ff8700'));
+  if (u.effort) p.push('🧠 ' + c(u.effort, eff[u.effort] || '#d7875f'));
+  p.push(c('voice', '#d7875f'));
+  if (u.ctx && u.win) { const pc = Math.round(u.ctx / u.win * 100); p.push(`${c('ctx', '#ffaf5f')} ${bar(pc)} ${c(pc + '%', '#ffaf5f')} ${c(k(u.ctx), '#af875f')}`); }
+  for (const [lab, w] of [['5h', u.five], ['wk', u.week]]) if (w) { const r = w.reset ? left(w.reset) : ''; p.push(`${c(lab, '#ffaf5f')} ${bar(w.pct)} ${c(w.pct + '%', '#ffaf5f')}${r ? ' ' + c('→' + r, '#af875f') : ''}`); }
+  if (u.cost) p.push(c('$' + u.cost.toFixed(2), '#ffd700'));
+  $('sl').innerHTML = '<div class="l1">' + p.map(x => '<span class="g">' + x + '</span>').join('<span class="s">│</span>') + '</div><div class="l2">⏵⏵ bypass permissions on <i>· ' + T.slHint + '</i></div>';
+}
+setInterval(() => showUsage(), 30000);
+$('stop').onclick = async () => { stopAudio(); await api('/api/stop', { method:'POST' }); };
+$('form').onsubmit = e => { e.preventDefault(); const t = $('txt').value.trim(); if (t || attach.length) { $('txt').value = ''; unlockAudio(); ask(t); } };
+
+// ---------- attachments ----------
+let attach = []; // { name, path, thumb, chip, up: Promise }
+$('attach').onclick = () => { if (!PIN) return showGate(); $('file').click(); };
+$('file').onchange = () => {
+  for (const f of $('file').files) {
+    const a = { name: f.name, path: null, thumb: f.type.startsWith('image/') ? URL.createObjectURL(f) : null };
+    const c = a.chip = document.createElement('div'); c.className = 'chip up';
+    if (a.thumb) { const im = document.createElement('img'); im.src = a.thumb; c.appendChild(im); }
+    const sp = document.createElement('span'); sp.textContent = f.name; c.appendChild(sp);
+    const x = document.createElement('i'); x.textContent = '×'; x.onclick = () => { attach = attach.filter(o => o !== a); c.remove(); }; c.appendChild(x);
+    $('att').appendChild(c); attach.push(a);
+    a.up = api('/api/upload', { method:'POST', headers:{ 'x-name': encodeURIComponent(f.name), 'content-type':'application/octet-stream' }, body:f })
+      .then(r => r.json()).then(j => { a.path = j.path; a.url = j.url; c.classList.remove('up'); })
+      .catch(() => { add('err', T.uploadFail + f.name); attach = attach.filter(o => o !== a); c.remove(); });
+  }
+  $('file').value = '';
+};
+function sys(t) { const d = document.createElement('div'); d.className = 'sys'; $('log').appendChild(d); let i = 0;
+  const iv = setInterval(() => { d.textContent = t.slice(0, ++i) + (i < t.length ? '_' : ''); if (i >= t.length) clearInterval(iv); }, 35); scroll(); }
+setInterval(() => { $('clock').textContent = new Date().toLocaleTimeString('en-GB') + (HOST ? ' · ' + HOST.toUpperCase() : ''); }, 1000);
+// ---------- audio (Web Audio: unlocked on tap so later chunks can still play — iOS) ----------
+let ctx, analyser, freq, queue = [], playing = null, playToken = 0;
+function unlockAudio() {
+  if (!ctx) {
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = ctx.createAnalyser(); analyser.fftSize = 128; analyser.smoothingTimeConstant = .75;
+    analyser.connect(ctx.destination); freq = new Uint8Array(analyser.frequencyBinCount);
+  }
+  if (ctx.state === 'suspended') ctx.resume();
+  const b = ctx.createBuffer(1, 1, 22050), s = ctx.createBufferSource(); s.buffer = b; s.connect(ctx.destination); s.start(0);
+}
+function stopAudio() { playToken++; queue = []; pumping = false; if (playing) { try { playing.stop(); } catch {} playing = null; } }
+function enqueue(url) { if (muted || !ctx) return; const tok = playToken; queue.push(fetch(url).then(r => r.arrayBuffer()).then(b => ctx.decodeAudioData(b)).catch(() => null)); if (!pumping) next(tok); }
+// pumping = a play loop is already running (including load/decode), so a second loop never overlaps audio
+let pumping = false;
+async function next(tok) {
+  if (tok !== playToken) return;
+  if (!queue.length) { playing = null; pumping = false; return; }
+  pumping = true;
+  const buf = await queue.shift();
+  if (tok !== playToken) return;
+  if (!buf) return next(tok);
+  const s = ctx.createBufferSource(); s.buffer = buf; s.connect(analyser);
+  playing = s; s.onended = () => { playing = null; next(tok); }; s.start(0);
+}
+
+// ---------- ask (SSE over fetch) ----------
+let running = false;
+async function ask(text) {
+  stopAudio();
+  const files = attach; attach = []; $('att').innerHTML = '';
+  const me = add('me', text || (files.length ? T.files(files.length) : ''));
+  if (files.length) {
+    const th = document.createElement('div'); th.className = 'thumbs';
+    for (const f of files) if (f.thumb) { const im = document.createElement('img'); im.src = f.thumb; th.appendChild(im); }
+    if (th.children.length) me.appendChild(th);
+    await Promise.all(files.map(f => f.up));
+  }
+  const paths = files.map(f => f.path).filter(Boolean), thumbs = files.map(f => f.url).filter(Boolean);
+  running = true; $('dot').className = 'dot busy';
+  let bubble = null;
+  const end = () => { if (bubble) bubble.classList.remove('live'); bubble = null; };
+  try {
+    const r = await api('/api/ask', { method:'POST', headers:{ 'content-type':'application/json' }, body: JSON.stringify({ text, files: paths, thumbs }) });
+    const rd = r.body.getReader(), dec = new TextDecoder(); let buf = '';
+    while (true) {
+      const { value, done } = await rd.read(); if (done) break;
+      buf += dec.decode(value, { stream:true });
+      let i;
+      while ((i = buf.indexOf('\n\n')) >= 0) {
+        const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
+        const line = chunk.split('\n').find(l => l.startsWith('data: ')); if (!line) continue;
+        const ev = JSON.parse(line.slice(6));
+        if (ev.type === 'text') { if (!bubble) { bubble = add('ai', ''); bubble.classList.add('live'); } bubble.textContent += ev.t; scroll(); }
+        else if (ev.type === 'tool') { end(); addTool(ev.name); }
+        else if (ev.type === 'audio') enqueue(ev.url);
+        else if (ev.type === 'usage') showUsage(ev.usage);
+        else if (ev.type === 'image') { end(); addImage(ev.url); }
+        else if (ev.type === 'video') { end(); addVideo(ev.url); }
+        else if (ev.type === 'done' && ev.code) add('err', T.exitErr + ev.code + (ev.err ? '\n' + ev.err : ''));
+      }
+    }
+  } catch (e) { if (e.message !== 'pin') add('err', T.lost + e.message); }
+  end(); running = false; histSig = ''; ping();
+}
+
+// ---------- haptics: native shell on iPhone if present, navigator.vibrate on Android ----------
+function buzz(ms, kind) {
+  const h = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.haptic;
+  if (h) h.postMessage(kind); else if (navigator.vibrate) navigator.vibrate(ms);
+}
+
+// ---------- push-to-talk ----------
+const mic = $('mic');
+let rec = null, mr = null, chunks = [], finalText = '', holding = false, cancelled = false, y0 = 0;
+
+function startDevice() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  rec = new SR(); rec.lang = SPEECH_LANG || navigator.language || 'en-US'; rec.interimResults = true; rec.continuous = true;
+  finalText = '';
+  rec.onresult = e => {
+    let interim = ''; finalText = '';
+    for (const r of e.results) (r.isFinal ? (finalText += r[0].transcript) : (interim += r[0].transcript));
+    $('live').textContent = finalText + interim; heard = performance.now();
+  };
+  rec.onerror = e => {
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { sttMode = 'server'; store.set('stt', 'server'); paintToggles(); add('tool', T.srDenied); }
+  };
+  rec.onend = () => { const t = ($('live').textContent || '').trim(); $('live').textContent = ''; rec = null; if (t && !cancelled) ask(t); };
+  rec.start();
+}
+async function startServer() {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+  const type = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
+  mr = new MediaRecorder(stream, { mimeType:type }); chunks = [];
+  // real mic level so the ring reacts to your voice
+  try { const src = ctx.createMediaStreamSource(stream); micAn = ctx.createAnalyser(); micAn.fftSize = 128; src.connect(micAn); } catch {}
+  mr.ondataavailable = e => e.data.size && chunks.push(e.data);
+  mr.onstop = async () => {
+    stream.getTracks().forEach(t => t.stop()); micAn = null;
+    const blob = new Blob(chunks, { type }); mr = null;
+    if (blob.size < 2000 || cancelled) return;
+    $('live').textContent = T.transcribing; transcribing = true;
+    try {
+      const j = await (await api('/api/stt', { method:'POST', headers:{ 'content-type':type }, body:blob })).json();
+      $('live').textContent = '';
+      if (j.text && j.text.trim()) ask(j.text.trim()); else if (j.error) add('err', j.error);
+    } catch (e) { $('live').textContent = ''; add('err', e.message); }
+    transcribing = false;
+  };
+  mr.start();
+  if (!holding) mr.stop(); // finger released before the mic was granted
+}
+mic.addEventListener('pointerdown', async e => {
+  e.preventDefault(); if (!PIN) return showGate();
+  try { mic.setPointerCapture(e.pointerId); } catch {}
+  cancelled = false; y0 = e.clientY; mic.classList.remove('cancel');
+  holding = true; burst = 1; unlockAudio(); stopAudio();
+  buzz(15, 'medium');
+  try { sttMode === 'device' ? startDevice() : await startServer(); }
+  catch (err) { add('err', T.micFail + err.message); holding = false; }
+});
+// drag up more than 70px = cancel (drag back down to send anyway)
+mic.addEventListener('pointermove', e => {
+  if (!holding) return;
+  const c = y0 - e.clientY > 70;
+  if (c !== mic.classList.contains('cancel')) {
+    mic.classList.toggle('cancel', c); buzz(10, c ? 'warning' : 'light');
+    $('hint').textContent = c ? T.releaseCancel : HINT.listen;
+  }
+});
+const release = () => {
+  if (!holding) return; holding = false;
+  cancelled = mic.classList.contains('cancel'); mic.classList.remove('cancel');
+  if (cancelled) {
+    $('live').textContent = ''; $('hint').textContent = T.cancelled;
+    if (rec) { try { rec.abort(); } catch {} }
+    if (mr && mr.state === 'recording') mr.stop();
+    return;
+  }
+  buzz(8, 'light');
+  if (rec) setTimeout(() => rec && rec.stop(), 350); // catch the last word
+  if (mr && mr.state === 'recording') setTimeout(() => mr && mr.state === 'recording' && mr.stop(), 300);
+};
+mic.addEventListener('pointerup', release);
+mic.addEventListener('pointercancel', release);
+mic.addEventListener('pointerleave', release);
+mic.addEventListener('contextmenu', e => e.preventDefault());
+
+// ================= motion graphics =================
+let micAn = null, heard = 0, burst = 0, transcribing = false;
+const ACC = [255, 135, 0];
+const rgba = a => `rgba(${ACC[0]},${ACC[1]},${ACC[2]},${a})`;
+const mode = () => holding ? 'listen' : playing ? 'speak' : (running || transcribing) ? 'think' : 'idle';
+const LABEL = { idle:'STANDBY', listen:'LISTENING', think:'PROCESSING', speak:'SPEAKING' };
+const HINT = { idle:T.holdHint, listen:T.listenHint, think:T.thinkHint, speak:T.speakHint };
+
+function fit(c) { const d = Math.min(devicePixelRatio || 1, 2), r = c.getBoundingClientRect(); c.width = r.width * d; c.height = r.height * d; const g = c.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0); return g; }
+const bg = $('bg'), rx = $('rx');
+let gb = fit(bg), gr = fit(rx);
+addEventListener('resize', () => { gb = fit(bg); gr = fit(rx); });
+
+// ---------- background: grid + constellation + scan line ----------
+function drawBg() { gb.clearRect(0, 0, innerWidth, innerHeight); }
+
+// ---------- reactor ----------
+let energy = 0, spin = 0, ripples = [], lastRipple = 0, boot = 0;
+const bars = new Float32Array(48);
+function level(an) { if (!an) return 0; const a = new Uint8Array(an.frequencyBinCount); an.getByteFrequencyData(a); let s = 0; for (const v of a) s += v; return s / a.length / 255; }
+function arc(r, a0, a1, w, alpha) { gr.strokeStyle = rgba(alpha); gr.lineWidth = w; gr.beginPath(); gr.arc(0, 0, r, a0, a1); gr.stroke(); }
+
+function drawReactor(t, dt, m) {
+  const S = rx.clientWidth, R = S / 2; gr.clearRect(0, 0, S, S);
+  boot = Math.min(1, boot + dt / 600);
+  let target = m === 'idle' ? .05 : m === 'think' ? .2 : m === 'listen' ? .3 : .2;
+  if (m === 'speak' && analyser) { analyser.getByteFrequencyData(freq); target = .15 + level(analyser) * 1.4; }
+  if (m === 'listen') target += micAn ? level(micAn) * 1.6 : (performance.now() - heard < 300 ? .3 : 0);
+  energy += (target - energy) * Math.min(1, dt / 120);
+  burst = Math.max(0, burst - dt / 500);
+  spin += dt * .0025;
+
+  gr.save(); gr.translate(R, R); gr.globalAlpha = boot; gr.lineCap = 'round';
+  // outer ring: thin; while thinking a short arc spins around it
+  arc(R * .82, 0, 6.28, 1, .18);
+  if (m === 'think') arc(R * .82, spin, spin + 1, 1.6, .8);
+
+  // audio bars around the ring
+  const N = bars.length;
+  for (let i = 0; i < N; i++) {
+    let v = 0;
+    if (m === 'speak' && analyser) v = freq[(i < N / 2 ? i : N - 1 - i) % freq.length] / 255;
+    else if (m === 'listen') v = energy * (.5 + .5 * Math.abs(Math.sin(t / 140 + i * .7)));
+    bars[i] += (v - bars[i]) * .25;
+    if (bars[i] < .02) continue;
+    const a = i / N * 6.28 - 1.57, r1 = R * .5, r2 = r1 + bars[i] * R * .25;
+    gr.strokeStyle = rgba(.35 + bars[i] * .5); gr.lineWidth = 2;
+    gr.beginPath(); gr.moveTo(Math.cos(a) * r1, Math.sin(a) * r1); gr.lineTo(Math.cos(a) * r2, Math.sin(a) * r2); gr.stroke();
+  }
+
+  // center: a small solid dot that grows a little with energy
+  const cr = R * (.16 + energy * .05 + burst * .04);
+  gr.fillStyle = rgba(m === 'idle' ? .55 : .9); gr.beginPath(); gr.arc(0, 0, cr, 0, 6.28); gr.fill();
+  gr.restore();
+}
+
+let lastT = performance.now(), lastMode = '';
+function frame(t) {
+  const dt = Math.min(64, t - lastT); lastT = t;
+  const m = mode();
+  if (m !== lastMode) { lastMode = m; $('status').textContent = online || m !== 'idle' ? LABEL[m] : 'OFFLINE'; $('hint').textContent = HINT[m]; }
+  drawBg(); drawReactor(t, dt, m);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+setInterval(() => { if (lastMode === 'idle') $('status').textContent = online ? 'STANDBY' : 'OFFLINE'; }, 2000);
+</script>
+</body>
+</html>
