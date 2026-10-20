@@ -1,4 +1,4 @@
-# Screenshot all monitors -> tmp\shot-<time>.png, prints the path (JARVIS sends it to the phone)
+# Screenshot all monitors -> tmp\shot-<time>.png, prints the path (the voice app sends it to the phone)
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public class Dpi { [DllImport("user32.dll")] public static extern bool SetProcessDPIAware(); }'
 [Dpi]::SetProcessDPIAware() | Out-Null
